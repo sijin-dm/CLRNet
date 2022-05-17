@@ -35,6 +35,8 @@ def main():
         runner.validate()
     elif args.test:
         runner.test()
+    elif args.onnx:
+        runner.onnx()
     else:
         runner.train()
 
@@ -64,6 +66,10 @@ def parse_args():
         '--test',
         action='store_true',
         help='whether to test the checkpoint on testing set')
+    parser.add_argument(
+        '--onnx',
+        action='store_true',
+        help='convert to onnx model.')
     parser.add_argument('--gpus', nargs='+', type=int, default='0')
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     args = parser.parse_args()

@@ -16,7 +16,6 @@ from clrnet.utils.recorder import build_recorder
 from clrnet.utils.net_utils import save_model, load_network, resume_network
 from mmcv.parallel import MMDataParallel
 
-
 class Runner(object):
     def __init__(self, cfg):
         torch.manual_seed(cfg.seed)
@@ -25,8 +24,8 @@ class Runner(object):
         self.cfg = cfg
         self.recorder = build_recorder(self.cfg)
         self.net = build_net(self.cfg)
-        self.net = MMDataParallel(self.net,
-                                  device_ids=range(self.cfg.gpus)).cuda()
+        # self.net = MMDataParallel(self.net,
+        #                           device_ids=range(self.cfg.gpus)).cuda()
         self.recorder.logger.info('Network: \n' + str(self.net))
         self.resume()
         self.optimizer = build_optimizer(self.cfg, self.net)
@@ -146,3 +145,59 @@ class Runner(object):
     def save_ckpt(self, is_best=False):
         save_model(self.net, self.optimizer, self.scheduler, self.recorder,
                    is_best)
+
+    def onnx(self):
+        x = torch.randn([1, 3, 320, 800])
+        self.net.eval()
+        self.net.training=False
+        model_name = "model.onnx"
+        input_name = "input"
+        output_name = "output"
+
+        def export():
+            torch.onnx.export(
+                self.net,
+                x,
+                model_name,
+                input_names=[input_name],
+                output_names=[output_name],
+                dynamic_axes={
+                    input_name: {0: 'batch'},
+                    output_name: {0: 'batch'},
+                },
+                opset_version=11,
+            )
+            print("Converted onnx model done.")
+        def simplify():
+            import onnx
+            from onnxsim import simplify
+            input_shapes = {input_name:x.shape }
+
+            # use onnxsimplify to reduce reduent model.
+            onnx_model = onnx.load(model_name)
+            model_simp, check = simplify(onnx_model,
+                                        input_shapes=input_shapes,
+                                        dynamic_input_shape=True
+                                        )
+            assert check, "Simplified ONNX model could not be validated"
+            onnx.save(model_simp, model_name)
+            print("generated simplified onnx model named {}".format(model_name))
+        
+        def verify():
+            import onnxruntime as ort
+
+            ort_session = ort.InferenceSession("model.onnx")
+
+            outputs = ort_session.run(
+                None,
+                {"input": x.numpy()},
+            )
+            onnx_output = outputs[0]
+
+            pytorch_out = self.net(x).detach().numpy()
+            diff = pytorch_out-onnx_output
+            print("max diff: ", max(diff.flatten()))
+        export()
+        simplify()
+        verify()
+

@@ -114,8 +114,14 @@ class CLRHead(nn.Module):
         prior_xs = prior_xs * 2. - 1.
         prior_ys = prior_ys * 2. - 1.
         grid = torch.cat((prior_xs, prior_ys), dim=-1)
-        feature = F.grid_sample(batch_features, grid,
+
+        # Sijin
+        from mmcv.ops.point_sample import bilinear_grid_sample
+        feature = bilinear_grid_sample(batch_features, grid,
                                 align_corners=True).permute(0, 2, 1, 3)
+
+        # feature = F.grid_sample(batch_features, grid,
+        #                         align_corners=True).permute(0, 2, 1, 3)
 
         feature = feature.reshape(batch_size * num_priors,
                                   self.prior_feat_channels, self.sample_points,
